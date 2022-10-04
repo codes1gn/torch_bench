@@ -2,6 +2,21 @@ import numpy as np
 import torch
 import time
 import argparse
+from statistics import mean
+
+def black_box_binary(fn, lhs, rhs, ntimes=10):
+    timetraces = []
+    for i in range(ntimes):
+        start = time.time()
+        fn(lhs, rhs)
+        end = time.time()
+        duration = end - start
+        timetraces.append(duration)
+    return timetraces
+
+def profile_stats(timetraces, ops, matrix_size):
+        tflops = [ ops / timetraces[i] / 10**12 for i in range(len(timetraces)) ]
+        print("\n{}x{}x{} MM {} ops in {} sec = TFLOPS {}".format(matrix_size, matrix_size, matrix_size, ops, mean(timetraces), mean(tflops)), flush=True)
 
 def generate_matrices(matrix_size, data_format):
     #print("Generating Random Matrix", flush=True)
@@ -42,29 +57,34 @@ def run_benchmark(matrix, matrix_size):
     #     matrix_GPU = matrix.cuda()
     # else:
     #     matrix_GPU = matrix
-    matrix_GPU = matrix
+    # matrix_GPU = matrix
+    matrix_lhs = matrix.clone()
+    matrix_rhs = matrix
+
+    # support dispatch and config
+    timetraces = black_box_binary(torch.mm, matrix_lhs, matrix_rhs)
+    profile_stats(timetraces, ops, matrix_size)
 
     # Take a note for start time
-    start = time.time()
+    # start = time.time()
 
     # Begin Multiplication
     #print("Multiplying Matrices", flush=True)
     # result = torch.mm(matrix_GPU, matrix_GPU).cuda()
-    result = torch.mm(matrix_GPU, matrix_GPU)
 
     # Wait operation to finish
     # if(useCUDA==True):
     #     torch.cuda.synchronize()
 
     # Take a note for end time
-    end = time.time()
+    # end = time.time()
 
     # Calculate Elapsed Time
-    duration = end - start
+    # duration = end - start
 
     # Calculate TFLOPS
-    tflops = ops / duration / 10**12
-    print("{}x{} MM {} ops in {} sec = TFLOPS {}".format(matrix_size, matrix_size, ops, duration, tflops), flush=True)
+    # tflops = ops / duration / 10**12
+    # print("{}x{} MM {} ops in {} sec = TFLOPS {}".format(matrix_size, matrix_size, ops, duration, tflops), flush=True)
 
     # Clean-up
     #print("Cleaning-up", flush=True)
