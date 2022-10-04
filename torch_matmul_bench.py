@@ -14,9 +14,41 @@ def black_box_binary(fn, lhs, rhs, ntimes=10):
         timetraces.append(duration)
     return timetraces
 
-def profile_stats(timetraces, ops, matrix_size):
+def mv_profile_stats(timetraces, ops, matrix_size):
         tflops = [ ops / timetraces[i] / 10**12 for i in range(len(timetraces)) ]
-        print("\n{}x{}x{} MM {} ops in {} sec = TFLOPS {}".format(matrix_size, matrix_size, matrix_size, ops, mean(timetraces), mean(tflops)), flush=True)
+        print("{}x{} MV {} ops in {} sec => TFLOPS {}".format(matrix_size, matrix_size, ops, mean(timetraces), mean(tflops)), flush=True)
+
+# 12 : sec ; 9 : ms ; 6 : us ; 3 : ns ; 0 : ps
+def mm_profile_stats(timetraces, ops, matrix_size):
+        tflops = [ ops / timetraces[i] / 10**12 for i in range(len(timetraces)) ]
+        print("{}x{}x{} MM {} ops in {} sec => TFLOPS {}".format(matrix_size, matrix_size, matrix_size, ops, mean(timetraces), mean(tflops)), flush=True)
+
+def generate_vector(matrix_size, data_format):
+    vector = torch.rand(matrix_size, 1, dtype=torch.float64)
+
+    # casting fp64 tensor as needed.
+    if(data_format=='fp64'):
+        vector=vector
+    elif(data_format=='fp32'):
+        vector=vector.float()
+    elif(data_format=='fp16'):
+        vector=vector.half()
+    elif(data_format=='bfloat16'):
+        vector=vector.bfloat16()
+    elif(data_format=='int64'):
+        vector=vector.long()
+    elif(data_format=='int32'):
+        vector=vector.int()
+    elif(data_format=='int16'):
+        vector=vector.short()
+    elif(data_format=='int8'):
+        vector=vector.char()
+    else:
+        print("Non-supported Data Type.")
+        exit()
+
+    #print("Matrix Generation is done", flush=True)
+    return(vector)
 
 def generate_matrices(matrix_size, data_format):
     #print("Generating Random Matrix", flush=True)
@@ -46,8 +78,16 @@ def generate_matrices(matrix_size, data_format):
     #print("Matrix Generation is done", flush=True)
     return(matrix)
 
+def run_gemv(matrix, vector, matrix_size):
+
+    ops = 2*matrix_size**2
+
+    # support dispatch and config
+    timetraces = black_box_binary(torch.mm, matrix, vector)
+    mv_profile_stats(timetraces, ops, matrix_size)
+
 # def run_benchmark(matrix, matrix_size, useCUDA):
-def run_benchmark(matrix, matrix_size):
+def run_gemm(matrix, matrix_size):
 
     # Calculating Number of Ops
     ops = 2*matrix_size**3
@@ -63,7 +103,7 @@ def run_benchmark(matrix, matrix_size):
 
     # support dispatch and config
     timetraces = black_box_binary(torch.mm, matrix_lhs, matrix_rhs)
-    profile_stats(timetraces, ops, matrix_size)
+    mm_profile_stats(timetraces, ops, matrix_size)
 
     # Take a note for start time
     # start = time.time()
@@ -98,7 +138,7 @@ def cmdline_args():
     # parser.add_argument("--useCUDA", type=bool, default=False, help='Use CUDA-capable GPU for Benchmark.', choices=[True, False])
     parser.add_argument("--precision", type=str, default='fp32', help='Data Precision for Benchmark', choices=['int8', 'int16', 'int32', 'int64', 'fp16', 'bfloat16', 'fp32', 'fp64'])
     parser.add_argument("--loop", type=bool, default=False, help='Run benchmark infinite times until manually cancelled.', choices=[True, False])
-    parser.add_argument("--size", type=str, default='32, 128, 512, 1024, 4096, 8192', help='List of matrices size separated by comma, e.g., 100, 500, 1000')
+    parser.add_argument("--size", type=str, default='32, 64, 128, 512, 1024, 4096, 8192', help='List of matrices size separated by comma, e.g., 100, 500, 1000')
     return(parser.parse_args())
 
 
@@ -122,10 +162,12 @@ if __name__ == '__main__':
 
     while True:
         for matrix_size in size_list:
-            matrix = generate_matrices(matrix_size,args.precision)
-            run_benchmark(matrix, matrix_size)
+            matrix = generate_matrices(matrix_size, args.precision)
+            vector = generate_vector(matrix_size, args.precision)
+            run_gemv(matrix, vector, matrix_size)
+            run_gemm(matrix, matrix_size)
             # run_benchmark(matrix, matrix_size, args.useCUDA)
-            del matrix
+            del matrix, vector
         if (args.loop==False):
             break
     
